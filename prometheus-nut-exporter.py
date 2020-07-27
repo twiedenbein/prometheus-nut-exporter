@@ -143,18 +143,20 @@ METRICS = {
 
 
 class NUTCollector(object):
-    def __init__(self, host, ups_name):
+    def __init__(self, host, nut_port, ups_name):
         self._host = host
         self._ups_name = ups_name
+        self._nut_port = nut_port
 
     def collect(self):
-        client = PyNUTClient(self._host)
+        client = PyNUTClient(host=self._host, port=self._nut_port)
         client_vars = client.list_vars(self._ups_name)
+        nut_server = "{}:{}".format(self._host, self._nut_port)
 
         info = GaugeMetricFamily(
             "nut_device_info",
             "information about the UPS",
-            labels=["manufacturer", "model", "serial"],
+            labels=["manufacturer", "model", "serial", "nut_server", "ups"],
         )
         info.add_metric(
             # APC UPSes seem to add whitespace at the end of the serial number
@@ -162,30 +164,40 @@ class NUTCollector(object):
                 client_vars["device.mfr"],
                 client_vars["device.model"],
                 client_vars["device.serial"].strip(),
+                nut_server,
+                self._ups_name,
             ],
             1,
         )
+        yield info
 
         ups_status = GaugeMetricFamily(
-            "nut_ups_status", "UPS status", labels=["status"]
+            "nut_ups_status", "UPS status", labels=["status", "nut_server", "ups"]
         )
-        ups_status.add_metric([client_vars["ups.status"]], 1.0)
+        ups_status.add_metric(
+            [client_vars["ups.status"], nut_server, self._ups_name], 1.0
+        )
+        yield ups_status
 
         if "ups.beeper.status" in client_vars:
             ups_beeper_status = GaugeMetricFamily(
-                "nut_ups_beeper_status", "UPS beeper status", labels=["status"]
+                "nut_ups_beeper_status",
+                "UPS beeper status",
+                labels=["status", "nut_server", "ups"],
             )
-            ups_beeper_status.add_metric([client_vars["ups.beeper.status"]], 1.0)
+            ups_beeper_status.add_metric(
+                [client_vars["ups.beeper.status"], nut_server, self._ups_name], 1.0
+            )
             yield ups_beeper_status
 
         if "battery.charger.status" in client_vars:
             battery_charger_status = GaugeMetricFamily(
                 "nut_battery_charger_status",
                 "Status of the battery charger",
-                labels=["status"],
+                labels=["status", "nut_server", "ups"],
             )
             battery_charger_status.add_metric(
-                [client_vars["battery.charger.status"]], 1.0
+                [client_vars["battery.charger.status"], nut_server, self._ups_name], 1.0
             )
             yield battery_charger_status
 
@@ -198,11 +210,11 @@ class NUTCollector(object):
                     )
                 else:
                     formatted_name = "_".join(("nut", formatted_name))
-                yield GaugeMetricFamily(
-                    formatted_name, METRICS[var]["help"], value=client_vars[var]
+                metric = GaugeMetricFamily(
+                    formatted_name, METRICS[var]["help"], labels=["nut_server", "ups"]
                 )
-        yield info
-        yield ups_status
+                metric.add_metric([nut_server, self._ups_name], client_vars[var])
+                yield metric
 
 
 if __name__ == "__main__":
@@ -218,7 +230,7 @@ if __name__ == "__main__":
     exporter_port = os.environ.get("EXPORTER_PORT") or 9710
 
     start_http_server(int(exporter_port))
-    REGISTRY.register(NUTCollector(host=host, ups_name=ups))
+    REGISTRY.register(NUTCollector(host=host, nut_port=nut_port, ups_name=ups))
 
     while True:
         time.sleep(1)
