@@ -215,7 +215,7 @@ if __name__ == "__main__":
     host = os.environ.get("HOST")
     nut_port = os.environ.get("NUT_PORT") or 3493
     ups = os.environ.get("UPS")
-    exporter_port = os.environ.get("EXPORTER_PORT") or 9293
+    exporter_port = os.environ.get("EXPORTER_PORT") or 9710
 
     start_http_server(int(exporter_port))
     REGISTRY.register(NUTCollector(host=host, ups_name=ups))

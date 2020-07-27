@@ -8,3 +8,5 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY . .
 
 CMD [ "python", "./prometheus-nut-exporter.py" ]
+
+EXPOSE 9710/tcp
